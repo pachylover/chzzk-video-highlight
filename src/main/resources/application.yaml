@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: highlight
+  datasource:
+    url: jdbc:postgresql://localhost:5432/highlight
+    username: highlight
+    password: changeme
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  docker:
+    compose:
+      enabled: false
+
+chzzk:
+  base-url: https://api.chzzk
+
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+
+# Logging and management
+logging:
+  level:
+    root: INFO
+    com.pacny.highlight: DEBUG

@@ -1,0 +1,32 @@
+{
+  "code": 200,
+  "message": null,
+  "content": {
+    "nextPlayerMessageTime": 152990,
+    "previousVideoChats": [],
+    "videoChats": [
+      {
+        "chatChannelId": "N28Zgs",
+        "messageTime": 1764160322728,
+        "userIdHash": "a9745c71831d8fc89391f12c30734fd1",
+        "content": "와따!!!!!",
+        "extras": "{\"chatType\":\"STREAMING\"}",
+        "messageTypeCode": 1,
+        "messageStatusType": "NORMAL",
+        "profile": "{\"userIdHash\":\"a9745c71831d8fc89391f12c30734fd1\",\"nickname\":\"구미당기지\"}",
+        "playerMessageTime": 15728
+      },
+      {
+        "chatChannelId": "X9Abc",
+        "messageTime": 1764160323728,
+        "userIdHash": "bbb45c71831d8fc89391f12c12345aaa",
+        "content": "대박",
+        "extras": null,
+        "messageTypeCode": 1,
+        "messageStatusType": "NORMAL",
+        "profile": "{\"userIdHash\":\"bbb45c71831d8fc89391f12c12345aaa\",\"nickname\":\"테스터\"}",
+        "playerMessageTime": 15800
+      }
+    ]
+  }
+}
