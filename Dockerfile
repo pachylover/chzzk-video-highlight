@@ -26,5 +26,5 @@ ENV JAVA_OPTS="-Xms256m -Xmx512m -Dspring.profiles.active=prod"
 EXPOSE 8080
 
 USER app
-ENTRYPOINT ["sh","-c","exec java $JAVA_OPTS -jar /opt/app/app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar /opt/app/app.jar"]
 
