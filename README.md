@@ -1,10 +1,10 @@
 # CHZZK 하이라이트 서비스
 
-이 저장소는 방송 채팅을 `api.chzzk`에서 수집하여 TimescaleDB에 저장하고, 1분 단위 집계(time_bucket('1 minute'))로 가장 채팅이 집중된 분을 찾아 하이라이트 메타데이터와 Gemini(요약 모델)로 생성한 제목/요약을 제공하는 API 서버입니다.
+이 저장소는 방송 채팅을 `api.chzzk`에서 수집하여 Postgres에 저장하고, 1분 단위 집계(player_message_time 기반 epoch ms)로 가장 채팅이 집중된 분을 찾아 하이라이트 메타데이터와 Gemini(요약 모델)로 생성한 제목/요약을 제공하는 API 서버입니다.
 
 ## 빠른 시작 (로컬)
 
-1. Postgres/TimescaleDB 인스턴스 시작(권장 이미지: `timescale/timescaledb:latest-pg15`). `compose.yaml`을 참고하거나 환경에 맞게 조정하세요.
+1. Postgres 인스턴스 시작(권장 이미지: `postgres:15`). `compose.yaml`을 참고하거나 환경에 맞게 조정하세요.
 
 2. `src/main/resources/application.yaml`에 DB 접속정보를 설정하세요.
 

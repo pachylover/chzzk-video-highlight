@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/highlight
     username: highlight
-    password: changeme
+    password: 1234
   jpa:
     hibernate:
       ddl-auto: validate
@@ -21,7 +21,9 @@ spring:
       enabled: false
 
 chzzk:
-  base-url: https://api.chzzk
+  base-url: https://api.chzzk.naver.com
+  # Max bytes WebClient will buffer for a single response (defaults to 10MB here)
+  max-in-memory-size: 10485760
 
 gemini:
   api-key: ${GEMINI_API_KEY:}
@@ -30,4 +32,4 @@ gemini:
 logging:
   level:
     root: INFO
-    com.pacny.highlight: DEBUG
+    com.pachy.highlight: DEBUG

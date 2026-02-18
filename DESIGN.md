@@ -7,8 +7,8 @@
 ## 목표 (MVP) ✅
 - 클라이언트가 비디오 URL을 보내면 비디오 ID를 추출
 - `api.chzzk`에 요청하여 해당 비디오의 채팅 데이터를 재귀적으로(페이징 끝까지) 수집
-- TimescaleDB에 채팅 저장 (하이퍼테이블, 타임스탬프 기반)
-- 1분(time_bucket('1 minute')) 단위로 집계하여 채팅이 가장 많은 분을 찾음
+- Postgres에 채팅 저장 (타임스탬프 기반)
+- 1분(player_message_time 기준, epoch ms를 분 단위로 그룹화) 단위로 집계하여 채팅이 가장 많은 분을 찾음
 - 그 분을 기반으로 하이라이트 메타데이터를 생성하고 `highlights` 테이블에 저장
 - 사용자에게 채팅 원본 + 해당 분의 요약(제목 포함, Gemini로 생성)을 반환
 
@@ -16,7 +16,7 @@
 - API 서버 (Spring Boot / Kotlin 또는 Java) — 클라이언트 요청 수신, 입력 검증, 작업 생성
 - 작업 큐 (Redis + Bull/Resque 혹은 Spring Task Executor + Redis) — 수집/처리 비동기화
 - 워커(백그라운드) — api.chzzk 호출, 페이징/재귀 수집, DB 저장, 집계, 요약 호출
-- TimescaleDB (Postgres 확장) — 채팅 시계열 데이터 보관 및 집계
+- Postgres — 채팅 시계열 데이터 보관 및 집계
 - 모델요약 (Gemini) — 채팅 텍스트 요약 및 제목 생성
 - 옵저버빌리티: 로깅, 메트릭(Prometheus), 에러 (Sentry)
 
@@ -24,7 +24,7 @@
 1. 클라이언트 -> POST /api/v1/highlights { url }
 2. API 서버: URL 검증, 비디오ID 추출, 새 작업 생성 → 202 Accepted (task_id)
 3. 워커: `api.chzzk` 호출해서 채팅 데이터 재귀 수집(페이징 끝까지)
-4. 채팅을 TimescaleDB에 배치로 저장 (chat rows)
+4. 채팅을 Postgres에 배치로 저장 (chat rows)
 5. 집계 쿼리로 가장 많은 채팅이 발생한 1분 구간을 찾음
 6. 하이라이트 범위(예: 해당 분 시작 -30s ~ +90s) 설정, `highlights` 테이블에 메타 저장
 7. Gemini에 채팅 데이터(요약 대상) 전송 → 제목 + 요약 수신
@@ -51,13 +51,13 @@
   "status": "done",
   "video_id": "abc123",
   "highlight": {
-    "start": "2025-12-19T12:34:00Z",
-    "end": "2025-12-19T12:36:30Z",
-    "minute": "2025-12-19T12:35:00Z",
+    "start": 1766232840000,
+    "end": 1766232990000,
+    "minute": 1766232900000,
     "chat_count": 254,
     "title": "격렬한 댓글 폭발: 추격전의 순간",
     "summary": "요약 텍스트...",
-    "chat_snippet": [ { "ts": "...", "user": "x", "msg": "..." }, ... ]
+    "chat_snippet": [ { "player_message_time": "...", "user": "x", "msg": "..." }, ... ]
   }
 }
 ```
@@ -69,57 +69,52 @@
 - 500: server error
 
 ## DB 스키마 (Timescale 권장) 🗄️
-### chats (하이퍼테이블)
-- id: uuid (PK)
+### chats
+- id: bigserial (PK)
 - video_id: text
-- ts: timestamptz (indexed, hypertable time column)
+- player_message_time: bigint (epoch millis) — 집계/중복 판단 기준
 - user_id: text
 - username: text
 - message: text
-- raw: jsonb (원본 이벤트)
 - created_at: timestamptz default now()
 
 SQL (요약):
 ```sql
 CREATE TABLE chats (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id bigserial PRIMARY KEY,
   video_id text NOT NULL,
-  ts timestamptz NOT NULL,
+  player_message_time bigint, -- epoch millis
   user_id text,
   username text,
   message text,
-  raw jsonb,
   created_at timestamptz DEFAULT now()
 );
-SELECT create_hypertable('chats', 'ts');
-CREATE INDEX ON chats (video_id, ts DESC);
+CREATE INDEX ON chats (video_id DESC);
 ```
 
 ### highlights
 - id: uuid (PK)
 - video_id: text
-- minute: timestamptz (time_bucket start)
-- start_ts: timestamptz
-- end_ts: timestamptz
+- minute: bigint (epoch millis)
+- start_ts: bigint (epoch millis)
+- end_ts: bigint (epoch millis)
 - chat_count: integer
 - title: text
 - summary: text
-- chat_snapshot: jsonb (대표 채팅 또는 요약용 데이터)
 - status: enum('pending','processing','done','failed')
 - created_at, updated_at
 
 SQL (요약):
 ```sql
 CREATE TABLE highlights (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id bigserial PRIMARY KEY,
   video_id text NOT NULL,
-  minute timestamptz NOT NULL,
-  start_ts timestamptz,
-  end_ts timestamptz,
+  minute bigint NOT NULL,
+  start_ts bigint,
+  end_ts bigint,
   chat_count integer,
   title text,
   summary text,
-  chat_snapshot jsonb,
   status text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
@@ -130,10 +125,10 @@ CREATE INDEX ON highlights (video_id, minute);
 ## 핵심 쿼리 (예시) 🔍
 - 최다 채팅 1분 찾기:
 ```sql
-SELECT time_bucket('1 minute', ts) AS minute, count(*) AS cnt
+SELECT (player_message_time - (player_message_time % 60000)) AS minute, count(*) AS cnt
 FROM chats
 WHERE video_id = $1
-GROUP BY minute
+GROUP BY (player_message_time - (player_message_time % 60000))
 ORDER BY cnt DESC
 LIMIT 1;
 ```
@@ -186,7 +181,7 @@ Messages:
 - 비밀값은 Vault/환경변수로 관리
 
 ## 테스팅 계획 ✅
-- 유닛: 비디오ID 추출, time_bucket 쿼리, 요약 프롬프트 생성
+- 유닛: 비디오ID 추출, player_message_time(분단위 집계) 쿼리, 요약 프롬프트 생성
 - 통합: Mock `api.chzzk`로 전체 pipeline 시뮬레이션
 - E2E: 로컬 Timescale + 워커로 실제 데이터 수집부터 요약까지 검증
 
@@ -198,7 +193,7 @@ Messages:
 
 ## 다음 단계 (권장 순서) ▶️
 1. API 계약(위의 엔드포인트) 확정 및 요청/응답 스펙 정리
-2. TimescaleDB 스키마 적용 및 초기 테스트 데이터 적재
+2. Postgres 스키마 적용 및 초기 테스트 데이터 적재
 3. `api.chzzk` 통신 모듈 구현(페이징/재시도 포함)
 4. 워커 + 작업 큐 구현, 로컬 E2E 테스트
 5. Gemini 연결 및 프롬프트 튜닝
