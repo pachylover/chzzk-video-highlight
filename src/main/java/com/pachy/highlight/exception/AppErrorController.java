@@ -5,6 +5,7 @@ import org.springframework.boot.web.servlet.error.ErrorAttributes;
 import org.springframework.boot.web.servlet.error.ErrorController;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,7 +28,7 @@ public class AppErrorController implements ErrorController {
 	}
 
 	@RequestMapping("/error")
-	public ResponseEntity<Map<String, Object>> error(HttpServletRequest request) {
+	public ResponseEntity<Map<String, Object>> error(@NonNull HttpServletRequest request) {
 		var opts = ErrorAttributeOptions.defaults()
 				.including(ErrorAttributeOptions.Include.MESSAGE)
 				.including(ErrorAttributeOptions.Include.BINDING_ERRORS);

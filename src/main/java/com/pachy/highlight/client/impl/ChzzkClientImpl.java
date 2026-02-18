@@ -49,10 +49,16 @@ public class ChzzkClientImpl implements ChzzkClient {
 
         while (true) {
             try {
-                final String uri;
-                uri = String.format("/service/v1/videos/%s/chats?playerMessageTime=%d&previousVideoChatSize=%d", videoId, playerMessageTime, pageSize);
+                // lambda에서 로컬 변수를 캡처할 때는 해당 변수가 final 또는 effectively final이어야 합니다.
+                // `playerMessageTime`은 루프 안에서 갱신되므로 여기서는 복사본을 만들어 사용합니다.
+                long pmt = playerMessageTime;
 
-                ChzzkResponse<ChzzkChatResponse> resp = webClient.get().uri(uri)
+                ChzzkResponse<ChzzkChatResponse> resp = webClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path("/service/v1/videos/{videoId}/chats") // 템플릿화
+                                .queryParam("playerMessageTime", pmt)
+                                .queryParam("previousVideoChatSize", pageSize)
+                                .build(videoId))
                         .retrieve()
                         .bodyToMono(new ParameterizedTypeReference<ChzzkResponse<ChzzkChatResponse>>() {})
                         .block();
@@ -111,6 +117,7 @@ public class ChzzkClientImpl implements ChzzkClient {
                 if (next == null || next.equals(playerMessageTime)) {
                     break;
                 }
+                
                 playerMessageTime = next;
 
                 // reset retry on success
@@ -158,8 +165,9 @@ public class ChzzkClientImpl implements ChzzkClient {
 
     public ChzzkVideoResponse fetchVideoInfo(String videoId) {
         try {
-            String uri = String.format("/service/v3/videos/%s", videoId);
-            ChzzkResponse<ChzzkVideoResponse> resp = webClient.get().uri(uri)
+            
+            ChzzkResponse<ChzzkVideoResponse> resp = webClient.get()
+                    .uri(urlBuilder -> urlBuilder.path("/service/v3/videos/{videoId}").build(videoId))
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<ChzzkResponse<ChzzkVideoResponse>>() {})
                     .block();
@@ -171,6 +179,7 @@ public class ChzzkClientImpl implements ChzzkClient {
             return resp.getContent();
         } catch (Exception e) {
             log.error("Error fetching video info for {}: {}", videoId, e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }

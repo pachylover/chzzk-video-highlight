@@ -10,17 +10,21 @@ import org.springframework.web.reactive.function.client.WebClient;
 @Configuration
 public class WebClientConfig {
 
-    @Bean
-    @Qualifier("chzzkWebClient")
-    public WebClient chzzkWebClient(WebClient.Builder builder,
-                                   @Value("${chzzk.base-url}") String baseUrl,
-                                   @Value("${chzzk.max-in-memory-size:10485760}") int maxInMemorySize) {
-        ExchangeStrategies strategies = ExchangeStrategies.builder()
-                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxInMemorySize))
-                .build();
+	@Bean
+	@Qualifier("chzzkWebClient")
+	public WebClient chzzkWebClient(WebClient.Builder builder,
+			@Value("${chzzk.base-url}") String baseUrl,
+			@Value("${chzzk.max-in-memory-size:10485760}") int maxInMemorySize) {
+		ExchangeStrategies strategies = ExchangeStrategies.builder()
+				.codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxInMemorySize))
+				.build();
 
-        return builder.baseUrl(baseUrl)
-                .exchangeStrategies(strategies)
-                .build();
-    }
+		if (baseUrl == null || baseUrl.isEmpty()) {
+			throw new IllegalArgumentException("chzzk.base-url must be configured");
+		}
+
+		return builder.baseUrl(baseUrl)
+				.exchangeStrategies(strategies)
+				.build();
+	}
 }

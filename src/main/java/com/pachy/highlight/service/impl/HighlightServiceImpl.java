@@ -15,8 +15,6 @@ import com.pachy.highlight.repository.ChatBatchInsertRepository;
 import com.pachy.highlight.repository.ChatRepository;
 import com.pachy.highlight.repository.HighlightRepository;
 import com.pachy.highlight.service.HighlightService;
-import com.pachy.highlight.util.VideoIdExtractor;
-
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.List;
@@ -115,6 +113,7 @@ public class HighlightServiceImpl implements HighlightService {
         } catch (Exception e) {
             // 예외 처리: 로그 기록 등
             log.error("하이라이트 생성 중 예외 발생 - videoId: {}", videoId, e);
+            e.printStackTrace();
         }
     }
 

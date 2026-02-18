@@ -1,13 +1,11 @@
 package com.pachy.highlight.controller;
 
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import com.pachy.highlight.dto.CreateHighlightRequest;
 import com.pachy.highlight.dto.HighlightResponse;
 import com.pachy.highlight.dto.response.Response;
 import com.pachy.highlight.dto.response.ResponseList;
