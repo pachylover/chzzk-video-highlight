@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 
 /**
- * Registers the RateLimitFilter for API endpoints.
+ * Registers the RateLimitFilter for all endpoints.
  */
 @Configuration
 public class RateLimitConfig {
@@ -16,8 +16,8 @@ public class RateLimitConfig {
     public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration() {
         FilterRegistrationBean<RateLimitFilter> reg = new FilterRegistrationBean<>();
         reg.setFilter(new RateLimitFilter());
-        // Apply only to API endpoints
-        reg.addUrlPatterns("/api/*");
+        // Apply to all endpoints
+        reg.addUrlPatterns("/*");
         reg.setName("rateLimitFilter");
         // Execute early in the filter chain
         reg.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
