@@ -119,7 +119,7 @@ public class HighlightServiceImpl implements HighlightService {
 
     @Override
     public List<HighlightResponse> getHighlight(String id) {
-        List<Highlight> highlights = highlightRepository.findAllByVideoId(id);
+        List<Highlight> highlights = highlightRepository.findAllByVideoIdOrderByChatCountDesc(id);
         if (highlights.isEmpty()) return null;
         return highlights.stream().map(Highlight::toResponse).toList();
     }

@@ -7,5 +7,5 @@ import com.pachy.highlight.entity.Highlight;
 import java.util.List;
 
 public interface HighlightRepository extends JpaRepository<Highlight, Long> {
-  List<Highlight> findAllByVideoId(String videoId);
+  List<Highlight> findAllByVideoIdOrderByChatCountDesc(String videoId);
 }
