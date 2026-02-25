@@ -144,6 +144,24 @@ public class StringUtil {
 		return string.trim().startsWith("{") && string.trim().endsWith("}");
 	}
 
+	/**
+	 * Simple chat message sanitizer. Removes characters that will break
+	 * database encoding (notably the null character '\u0000'), and trims
+	 * the result.
+	 *
+	 * @param message raw chat text (may be null)
+	 * @return cleaned string or null if input was null
+	 */
+	public static String sanitizeChat(String message) {
+		if (message == null) {
+			return null;
+		}
+		// eliminate NUL characters which PostgreSQL rejects with UTF8 encoding
+		String cleaned = message.replace("\u0000", "");
+		// additional control‑character stripping could be added here later
+		return cleaned.trim();
+	}
+
 	public static String readInputStream(InputStream inputStream) {
 		StringBuilder result = new StringBuilder();
 		byte[] buffer = new byte[1024];

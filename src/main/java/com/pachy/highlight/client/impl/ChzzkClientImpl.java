@@ -8,6 +8,7 @@ import com.pachy.highlight.client.dto.ChzzkResponse;
 import com.pachy.highlight.dto.ChzzkChatResponse;
 import com.pachy.highlight.dto.ChzzkVideoResponse;
 import com.pachy.highlight.entity.Chat;
+import com.pachy.highlight.util.func.StringUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,14 +76,21 @@ public class ChzzkClientImpl implements ChzzkClient {
 
                     // message가 이모티콘만으로 구성된 경우 continue (실제 채팅 메시지가 없는 경우 제외)
                     // 이모티콘은 {:imoticon_name:}의 형식으로 이루어져 있음, 여러개도 사용 가능한 형태이므로 정규식으로 체크
-                    if (vc.getContent() != null && vc.getContent().matches("^(\\{:[^:]+?:\\})+$")) {
+                    String contents = vc.getContent();
+                    if (contents != null && contents.matches("^(\\{:[^:]+?:\\})+$")) {
+                        continue;
+                    }
+                    // sanitize chat text early to avoid inserting invalid bytes and to
+                    // allow emptiness check after trimming
+                    contents = StringUtil.sanitizeChat(contents);
+                    // contents 데이터 sanity check (null 또는 빈 문자열인 경우 continue)
+                    if (StringUtil.isEmpty(contents)) {
                         continue;
                     }
 
-
                     Chat c = Chat.builder()
                             .videoId(videoId)
-                            .message(vc.getContent())
+                            .message(contents)
                             .userId(vc.getUserIdHash())
                             .playerMessageTime(vc.getPlayerMessageTime())
                             .build();
