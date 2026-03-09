@@ -101,6 +101,7 @@ CREATE INDEX ON chats (video_id DESC);
 - chat_count: integer
 - title: text
 - summary: text
+- highlight_type: text           # category/origin of highlight (e.g. CHAT_PEAK, MANUAL, etc.)
 - status: enum('pending','processing','done','failed')
 - created_at, updated_at
 

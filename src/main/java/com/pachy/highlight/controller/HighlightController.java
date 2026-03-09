@@ -46,14 +46,15 @@ public class HighlightController {
     }
 
     @PostMapping("/{id}")
-    public ResponseEntity<Response> create(@PathVariable("id") String videoId) {
+    public ResponseEntity<Response> create(@PathVariable("id") String videoId,
+                                           @RequestParam(value = "type", required = false) String highlightType) {
         Response response = new Response();
         if (processing.putIfAbsent(videoId, true) != null) {
             response.setResultCode(HttpStatus.CONFLICT.value());
             response.setResultMsg("Highlight creation already in progress for this video");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
-        //이미 하이라이트가 존재하는경우 400 응답
+        // 이미 하이라이트가 존재하는경우 400 응답
         List<HighlightResponse> result = highlightService.getHighlight(videoId);
         if (result != null && !result.isEmpty()) {
             response.setResultCode(HttpStatus.BAD_REQUEST.value());
@@ -61,7 +62,7 @@ public class HighlightController {
             processing.remove(videoId);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
-        highlightService.createHighlight(videoId);
+        highlightService.createHighlight(videoId, highlightType);
         response.setResultCode(HttpStatus.CREATED.value());
         response.setResultMsg("Highlight creation started");
         processing.remove(videoId);

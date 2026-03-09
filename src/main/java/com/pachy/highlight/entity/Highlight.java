@@ -41,6 +41,9 @@ public class Highlight {
     @Column(name = "summary", columnDefinition = "text")
     private String summary;
 
+    @Column(name = "highlight_type")
+    private String highlightType;
+
     @Column(name = "status")
     private String status;
 
@@ -72,6 +75,7 @@ public class Highlight {
                 .chatCount(chatCount)
                 .title(title)
                 .summary(summary)
+                .highlightType(highlightType)
                 .build();
     }
 }

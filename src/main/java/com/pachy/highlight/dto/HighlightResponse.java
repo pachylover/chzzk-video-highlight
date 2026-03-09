@@ -17,5 +17,6 @@ public class HighlightResponse {
     private Integer chatCount;
     private String title;
     private String summary;
+    private String highlightType;
     private List<Object> chatSnippet;
 }

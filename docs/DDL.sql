@@ -32,8 +32,7 @@ CREATE TABLE IF NOT EXISTS highlights (
   end_ts bigint,
   chat_count integer,
   title text,
-  summary text,
-  chat_snapshot jsonb,
+  summary text,  highlight_type text,            -- new column to categorize why/how highlight was generated  chat_snapshot jsonb,
   status text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()

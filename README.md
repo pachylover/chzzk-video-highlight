@@ -40,11 +40,16 @@ curl https://hiphant.pachylover.com/api/v1/videos/{videoId}
 ### 2) 하이라이트 생성
 
 - `POST /api/v1/highlights/{id}`
+- optional query parameter `type` may be passed to categorize the highlight (defaults to `AUTO`).
 
 예시:
 
 ```bash
+# 기본: 자동 생성
 curl -X POST https://hiphant.pachylover.com/api/v1/highlights/{videoId}
+
+# 타입 지정
+curl -X POST "https://hiphant.pachylover.com/api/v1/highlights/{videoId}?type=MANUAL"
 ```
 
 ### 3) 하이라이트 조회
