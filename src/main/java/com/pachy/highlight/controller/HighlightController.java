@@ -7,8 +7,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.pachy.highlight.dto.HighlightResponse;
+import com.pachy.highlight.dto.admin.RecentHighlightItem;
 import com.pachy.highlight.dto.response.Response;
 import com.pachy.highlight.dto.response.ResponseList;
+import com.pachy.highlight.entity.Highlight;
+import com.pachy.highlight.repository.HighlightRepository;
 import com.pachy.highlight.service.HighlightService;
 
 import java.util.List;
@@ -22,6 +25,21 @@ public class HighlightController {
 
     private static final Map<String, Boolean> processing = new ConcurrentHashMap<>();
     private final HighlightService highlightService;
+    private final HighlightRepository highlightRepository;
+
+    // 공개 홈용: 최근 생성된 하이라이트 (영상별 최신 1건, 기본 6건)
+    @GetMapping("/recent")
+    public ResponseEntity<ResponseList<RecentHighlightItem>> recent(
+            @RequestParam(value = "limit", defaultValue = "6") int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 20);
+        List<Highlight> highlights = highlightRepository.findRecentDistinctVideoHighlights(safeLimit);
+        List<RecentHighlightItem> items = highlights.stream().map(RecentHighlightItem::from).toList();
+
+        ResponseList<RecentHighlightItem> response = new ResponseList<>(HttpStatus.OK);
+        response.setCount(items.size());
+        response.setList(items);
+        return ResponseEntity.ok(response);
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<ResponseList<HighlightResponse>> get(@PathVariable("id") String id) {

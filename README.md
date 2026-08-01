@@ -62,6 +62,35 @@ curl -X POST "https://hiphant.pachylover.com/api/v1/highlights/{videoId}?type=MA
 curl https://hiphant.pachylover.com/api/v1/highlights/{videoId}
 ```
 
+### 4) 채팅 검색 (전체 사용자)
+
+- `GET /api/v1/chats/{videoId}?keyword=&username=&page=0&size=30`
+- `keyword`(메시지 부분검색), `username`(닉네임 부분검색) 중 하나 이상 지정. 페이지네이션 지원.
+
+```bash
+curl "https://hiphant.pachylover.com/api/v1/chats/{videoId}?keyword=하이라이트&page=0&size=30"
+```
+
+### 5) 배너 / 안내문구 (공개 조회)
+
+- `GET /api/v1/banners` — 활성 배너 목록
+- `GET /api/v1/announcements` — 활성 안내문구 목록
+
+## 관리자 API
+
+관리자 API 는 JWT 인증(`Authorization: Bearer <token>`)이 필요합니다. (`ROLE_ADMIN`)
+
+- `POST /api/v1/admin/auth/login` — `{ "username", "password" }` → `{ token, username, role }`
+- `GET  /api/v1/admin/auth/me` — 토큰 유효성 확인
+- `GET  /api/v1/admin/stats` — 통계(영상/하이라이트/채팅 수, 일자별 추이, 상위 영상)
+- `GET  /api/v1/admin/highlights/recent?limit=20` — 최근 생성 하이라이트
+- `GET/POST/PUT/DELETE /api/v1/admin/banners` — 배너 관리
+- `GET/POST/PUT/DELETE /api/v1/admin/announcements` — 안내문구 관리
+
+### 관리자 계정 생성 (부트스트랩)
+
+`ADMIN_USERNAME` / `ADMIN_PASSWORD` 환경변수를 설정하고 앱을 실행하면, 동일 아이디가 없을 때 관리자 계정이 자동 생성됩니다(BCrypt 저장). 이후에는 환경변수를 제거해도 됩니다.
+
 ## 로컬 실행
 
 ### 1) DB 실행
@@ -76,6 +105,8 @@ docker compose up -d postgres
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
 - `GEMINI_API_KEY`
+- `ADMIN_JWT_SECRET` — 관리자 JWT 서명 키(32바이트 이상 랜덤 권장)
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` — 최초 관리자 계정 부트스트랩(선택)
 
 ### 3) 애플리케이션 실행
 
