@@ -1,0 +1,32 @@
+package com.pachy.highlight.dto.admin;
+
+import com.pachy.highlight.entity.Highlight;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.time.Instant;
+
+@Data
+@Builder
+public class RecentHighlightItem {
+    private Long id;
+    private String videoId;
+    private String title;
+    private Integer chatCount;
+    private String highlightType;
+    private Long minute;
+    private Instant createdAt;
+
+    public static RecentHighlightItem from(Highlight h) {
+        return RecentHighlightItem.builder()
+                .id(h.getId())
+                .videoId(h.getVideoId())
+                .title(h.getTitle())
+                .chatCount(h.getChatCount())
+                .highlightType(h.getHighlightType())
+                .minute(h.getMinute())
+                .createdAt(h.getCreatedAt())
+                .build();
+    }
+}

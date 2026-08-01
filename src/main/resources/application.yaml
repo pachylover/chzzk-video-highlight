@@ -58,6 +58,16 @@ gemini:
   # Render 환경변수에 GEMINI_API_KEY를 꼭 추가하세요!
   api-key: ${GEMINI_API_KEY:1234}
 
+admin:
+  # 관리자 JWT 설정 (운영에서는 반드시 ADMIN_JWT_SECRET 환경변수로 32바이트 이상 랜덤값 지정)
+  jwt:
+    secret: ${ADMIN_JWT_SECRET:change-me-please-use-a-long-random-secret-key-32bytes+}
+    expiration-ms: ${ADMIN_JWT_EXPIRATION_MS:43200000} # 12시간
+  # 최초 관리자 계정 부트스트랩 (없을 때만 생성). ADMIN_USERNAME/ADMIN_PASSWORD 환경변수 사용
+  bootstrap:
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
+
 logging:
   level:
     root: INFO
