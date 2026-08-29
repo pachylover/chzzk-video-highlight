@@ -12,6 +12,7 @@ import java.time.Instant;
 public class RecentHighlightItem {
     private Long id;
     private String videoId;
+    private String videoTitle;
     private String title;
     private Integer chatCount;
     private String highlightType;
@@ -22,6 +23,7 @@ public class RecentHighlightItem {
         return RecentHighlightItem.builder()
                 .id(h.getId())
                 .videoId(h.getVideoId())
+                .videoTitle(h.getVideoTitle())
                 .title(h.getTitle())
                 .chatCount(h.getChatCount())
                 .highlightType(h.getHighlightType())

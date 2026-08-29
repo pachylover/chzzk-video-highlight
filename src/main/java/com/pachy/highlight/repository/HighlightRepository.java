@@ -2,6 +2,7 @@ package com.pachy.highlight.repository;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,6 +22,16 @@ public interface HighlightRepository extends JpaRepository<Highlight, Long> {
           "  SELECT DISTINCT ON (video_id) * FROM highlights ORDER BY video_id, created_at DESC" +
           ") t ORDER BY created_at DESC LIMIT :limit", nativeQuery = true)
   List<Highlight> findRecentDistinctVideoHighlights(@Param("limit") int limit);
+
+  // 영상 제목이 아직 채워지지 않은 영상 ID 목록 (백필 대상)
+  @Query(value = "SELECT DISTINCT video_id FROM highlights WHERE video_title IS NULL OR video_title = ''",
+          nativeQuery = true)
+  List<String> findVideoIdsMissingTitle();
+
+  @Modifying
+  @Query(value = "UPDATE highlights SET video_title = :title, updated_at = now() WHERE video_id = :videoId",
+          nativeQuery = true)
+  int updateVideoTitle(@Param("videoId") String videoId, @Param("title") String title);
 
   // 통계
   @Query(value = "SELECT count(DISTINCT video_id) FROM highlights", nativeQuery = true)

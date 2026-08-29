@@ -23,6 +23,10 @@ public class Highlight {
     @Column(name = "video_id", nullable = false)
     private String videoId;
 
+    // 치지직 다시보기 제목. 생성 시점에 채워지며, 과거 데이터는 배치로 백필된다.
+    @Column(name = "video_title")
+    private String videoTitle;
+
     @Column(name = "minute", nullable = false, columnDefinition = "bigint")
     private Long minute;
 
@@ -69,6 +73,7 @@ public class Highlight {
                 .taskId(id != null ? id.toString() : null)
                 .status(status)
                 .videoId(videoId)
+                .videoTitle(videoTitle)
                 .minute(minute != null ? minute : 0L)
                 .start(startTs != null ? startTs : 0L)
                 .end(endTs != null ? endTs : 0L)

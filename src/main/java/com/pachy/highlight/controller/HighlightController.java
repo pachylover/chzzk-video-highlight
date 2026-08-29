@@ -3,8 +3,10 @@ package com.pachy.highlight.controller;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.pachy.highlight.dto.HighlightResponse;
 import com.pachy.highlight.dto.admin.RecentHighlightItem;
@@ -13,19 +15,18 @@ import com.pachy.highlight.dto.response.ResponseList;
 import com.pachy.highlight.entity.Highlight;
 import com.pachy.highlight.repository.HighlightRepository;
 import com.pachy.highlight.service.HighlightService;
+import com.pachy.highlight.service.progress.ProgressService;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/v1/highlights")
 @RequiredArgsConstructor
 public class HighlightController {
 
-    private static final Map<String, Boolean> processing = new ConcurrentHashMap<>();
     private final HighlightService highlightService;
     private final HighlightRepository highlightRepository;
+    private final ProgressService progressService;
 
     // 공개 홈용: 최근 생성된 하이라이트 (영상별 최신 1건, 기본 6건)
     @GetMapping("/recent")
@@ -44,22 +45,20 @@ public class HighlightController {
     @GetMapping("/{id}")
     public ResponseEntity<ResponseList<HighlightResponse>> get(@PathVariable("id") String id) {
         ResponseList<HighlightResponse> response = new ResponseList<>();
-        HttpStatus status;
         List<HighlightResponse> result = highlightService.getHighlight(id);
-        if (result == null || result.isEmpty()) status = HttpStatus.NOT_FOUND;
-        else {
-            if (processing.containsKey(id)) {
-                status = HttpStatus.ACCEPTED; // Still processing, but we have partial data to show
-            } else {
-                status = HttpStatus.OK;
-            }
-            status = HttpStatus.OK;
+
+        HttpStatus status;
+        if (result.isEmpty()) {
+            // 결과는 없지만 생성이 진행 중이면 202 로 알려 클라이언트가 진행 화면을 띄우게 한다
+            status = progressService.isRunning(id) ? HttpStatus.ACCEPTED : HttpStatus.NOT_FOUND;
+        } else {
+            status = progressService.isRunning(id) ? HttpStatus.ACCEPTED : HttpStatus.OK;
             response.setCount(result.size());
             response.setList(result);
         }
         response.setResultCode(status.value());
         response.setResultMsg(status.getReasonPhrase());
-        
+
         return ResponseEntity.ok(response);
     }
 
@@ -67,23 +66,31 @@ public class HighlightController {
     public ResponseEntity<Response> create(@PathVariable("id") String videoId,
                                            @RequestParam(value = "type", required = false) String highlightType) {
         Response response = new Response();
-        if (processing.putIfAbsent(videoId, true) != null) {
+
+        // 이미 하이라이트가 존재하는 경우 400 응답
+        if (!highlightService.getHighlight(videoId).isEmpty()) {
+            response.setResultCode(HttpStatus.BAD_REQUEST.value());
+            response.setResultMsg("Highlight already exists for this video");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+
+        if (!highlightService.createHighlight(videoId, highlightType)) {
             response.setResultCode(HttpStatus.CONFLICT.value());
             response.setResultMsg("Highlight creation already in progress for this video");
             return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
         }
-        // 이미 하이라이트가 존재하는경우 400 응답
-        List<HighlightResponse> result = highlightService.getHighlight(videoId);
-        if (result != null && !result.isEmpty()) {
-            response.setResultCode(HttpStatus.BAD_REQUEST.value());
-            response.setResultMsg("Highlight already exists for this video");
-            processing.remove(videoId);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
-        highlightService.createHighlight(videoId, highlightType);
+
         response.setResultCode(HttpStatus.CREATED.value());
         response.setResultMsg("Highlight creation started");
-        processing.remove(videoId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * 진행 상황 스트리밍(SSE). 하이라이트 생성 / 채팅 재수집의 현재 단계를 실시간으로 내려준다.
+     * 연결 시점에 진행 중인 작업이 있으면 마지막 상태를 즉시 한 번 전송한다.
+     */
+    @GetMapping(value = "/{id}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@PathVariable("id") String videoId) {
+        return progressService.subscribe(videoId);
     }
 }

@@ -10,7 +10,6 @@ import com.pachy.highlight.repository.HighlightRepository;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -64,11 +63,12 @@ public class AdminStatsController {
         return ResponseEntity.ok(new ResponseData<>(HttpStatus.OK, stats));
     }
 
+    /** 최근 생성된 하이라이트. 영상별로 최신 1건만 노출한다(같은 영상이 여러 줄 차지하지 않도록). */
     @GetMapping("/highlights/recent")
     public ResponseEntity<ResponseList<RecentHighlightItem>> recentHighlights(
             @RequestParam(value = "limit", defaultValue = "20") int limit) {
         int safeLimit = Math.min(Math.max(limit, 1), 100);
-        List<Highlight> highlights = highlightRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, safeLimit));
+        List<Highlight> highlights = highlightRepository.findRecentDistinctVideoHighlights(safeLimit);
         List<RecentHighlightItem> items = highlights.stream().map(RecentHighlightItem::from).toList();
 
         ResponseList<RecentHighlightItem> response = new ResponseList<>(HttpStatus.OK);
