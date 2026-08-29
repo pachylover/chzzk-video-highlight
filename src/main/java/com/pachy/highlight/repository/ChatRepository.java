@@ -51,6 +51,16 @@ public interface ChatRepository extends JpaRepository<Chat, Long> {
 
     long countByVideoId(String videoId);
 
+    /**
+     * 분당 채팅량 타임라인. 영상 시작 기준 분(0,1,2...)별 채팅 수를 오름차순으로 반환한다.
+     * 채팅이 하나도 없는 분은 행 자체가 없으므로 빈 구간 채우기는 호출측에서 처리한다.
+     */
+    @Query(value = "SELECT (player_message_time / 60000) AS minute_index, count(*) AS cnt " +
+            "FROM chats WHERE video_id = :videoId AND player_message_time IS NOT NULL " +
+            "GROUP BY (player_message_time / 60000) ORDER BY minute_index ASC",
+            nativeQuery = true)
+    List<Object[]> findChatCountsPerMinute(@Param("videoId") String videoId);
+
     @Query(value = "SELECT (player_message_time - (player_message_time % 60000)) AS minute_epoch, MIN(player_message_time) AS first_player_time, count(*) AS cnt FROM chats WHERE video_id = :videoId GROUP BY (player_message_time - (player_message_time % 60000)) ORDER BY cnt DESC LIMIT 5", nativeQuery = true)
     List<Object[]> findPeakMinute(@Param("videoId") String videoId);
 

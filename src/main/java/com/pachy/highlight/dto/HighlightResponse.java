@@ -11,6 +11,7 @@ public class HighlightResponse {
     private String taskId;
     private String status;
     private String videoId;
+    private String videoTitle;
     private long minute;
     private long start;
     private long end;

@@ -3,20 +3,15 @@ package com.pachy.highlight.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import com.pachy.highlight.client.ChzzkClient;
 import com.pachy.highlight.dto.HighlightResponse;
-import com.pachy.highlight.entity.Chat;
+import com.pachy.highlight.dto.progress.ProgressEvent.Phase;
 import com.pachy.highlight.entity.Highlight;
-import com.pachy.highlight.repository.ChatBatchInsertRepository;
-import com.pachy.highlight.repository.ChatRepository;
 import com.pachy.highlight.repository.HighlightRepository;
 import com.pachy.highlight.service.HighlightService;
-import java.sql.Timestamp;
-import java.time.Duration;
+import com.pachy.highlight.service.progress.ProgressService;
+
 import java.util.List;
 
 @Service
@@ -25,117 +20,35 @@ import java.util.List;
 public class HighlightServiceImpl implements HighlightService {
 
     private final HighlightRepository highlightRepository;
-    private final ChatRepository chatRepository;
-    private final ChatBatchInsertRepository chatBatchInsertRepository;
-    private final ChzzkClient chzzkClient;
+    private final HighlightProcessor highlightProcessor;
+    private final ProgressService progressService;
 
     @Override
-    @Transactional
-    public Long createHighlight(String videoId, String highlightType) {
+    public boolean createHighlight(String videoId, String highlightType) {
         log.info("하이라이트 생성 시작 - videoId: {}, type: {}", videoId, highlightType);
-        if (highlightType == null || highlightType.isBlank()) {
-            highlightType = "AUTO";
+        if (!progressService.tryStart(videoId)) {
+            return false;
         }
-        // 비동기 처리 시작
-        processVideoAsync(videoId);
-        return null;
+        progressService.publish(videoId, Phase.START, "하이라이트 생성을 준비하는 중입니다", 0);
+        highlightProcessor.process(videoId);
+        return true;
     }
 
-    @Async
-    @Transactional
-    public void processVideoAsync(String videoId) {
-        try {
-            // 채팅 수집
-            List<Chat> chats = chzzkClient.fetchAllChats(videoId);
-            log.info("채팅 수집 완료 - videoId: {}, 채팅 수: {}", videoId, chats.size());
-
-            if (!chats.isEmpty()) {
-                final int CHUNK = 500;
-                for (int i = 0; i < chats.size(); i += CHUNK) {
-                    int toIndex = Math.min(i + CHUNK, chats.size());
-                    List<Chat> chunk = chats.subList(i, toIndex);
-                    long t0 = System.currentTimeMillis();
-
-                    int inserted = chatBatchInsertRepository.insertBatch(chunk);
-
-                    long dt = System.currentTimeMillis() - t0;
-
-                    log.info("Batch inserted chunk [{} - {}) requested={} inserted={} in {} ms",
-                            i, toIndex, chunk.size(), inserted, dt);
-                }
-            }
-
-
-            // 최다 채팅 1분 찾기
-            List<Object[]> peakRows = chatRepository.findPeakMinute(videoId);
-            saveHighlights(videoId, peakRows, "NORMAL", "%d개의 채팅이 발생한 구간");
-
-            // ㅋㅋㅋ 채팅 많은 구간 찾기
-            peakRows = chatRepository.findKeywordPeakMinute(videoId, "ㅋㅋㅋ");
-            saveHighlights(videoId, peakRows, "LAUGH", "%d개의 ㅋㅋㅋ 채팅이 발생한 구간");
-
-            // ? 채팅 많은 구간 찾기
-            peakRows = chatRepository.findKeywordPeakMinute(videoId, "?");
-            saveHighlights(videoId, peakRows, "QUESTION", "%d개의 ? 채팅이 발생한 구간");
-        } catch (Exception e) {
-            // 예외 처리: 로그 기록 등
-            log.error("하이라이트 생성 중 예외 발생 - videoId: {}", videoId, e);
-            e.printStackTrace();
+    @Override
+    public boolean reloadChats(String videoId) {
+        log.info("채팅 재수집 시작 - videoId: {}", videoId);
+        if (!progressService.tryStart(videoId)) {
+            return false;
         }
+        progressService.publish(videoId, Phase.START, "채팅을 다시 불러오는 중입니다", 0);
+        highlightProcessor.reloadChats(videoId);
+        return true;
     }
 
     @Override
     public List<HighlightResponse> getHighlight(String id) {
         List<Highlight> highlights = highlightRepository.findAllByVideoIdOrderByChatCountDesc(id);
-        if (highlights.isEmpty()) return null;
+        if (highlights.isEmpty()) return List.of();
         return highlights.stream().map(Highlight::toResponse).toList();
-    }
-
-
-    private void saveHighlights(String videoId, List<Object[]> peakRows, String highlightType, String titleFormat) {
-        // 최다 채팅 1분 찾기
-        for (Object[] row : peakRows) {
-            Highlight h = new Highlight();
-            if (row == null || row.length < 3 || row[1] == null) continue;
-
-            Object minuteObj = row[1];
-            Object cntObj = row[2];
-
-            Long minuteEpoch = null;
-            // minute column now expected as bigint (epoch millis) but handle other driver types safely
-            if (minuteObj instanceof Number) {
-                minuteEpoch = ((Number) minuteObj).longValue();
-            } else if (minuteObj instanceof Timestamp) {
-                minuteEpoch = ((Timestamp) minuteObj).toInstant().toEpochMilli();
-            } else if (minuteObj instanceof java.time.OffsetDateTime) {
-                minuteEpoch = ((java.time.OffsetDateTime) minuteObj).toInstant().toEpochMilli();
-            } else if (minuteObj instanceof java.time.LocalDateTime) {
-                minuteEpoch = ((java.time.LocalDateTime) minuteObj).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-            } else if (minuteObj instanceof java.time.Instant) {
-                minuteEpoch = ((java.time.Instant) minuteObj).toEpochMilli();
-            } else if (minuteObj instanceof Object[]) {
-                Object[] inner = (Object[]) minuteObj;
-                if (inner.length > 0 && inner[0] instanceof Number) minuteEpoch = ((Number) inner[0]).longValue();
-            }
-
-            if (minuteEpoch != null) {
-                Number cnt = cntObj instanceof Number ? (Number) cntObj : null;
-                h.setVideoId(videoId);
-                h.setMinute(minuteEpoch);
-                h.setChatCount(cnt != null ? cnt.intValue() : 0);
-                h.setTitle(cnt != null ? String.format(titleFormat, cnt.intValue()) : "하이라이트");
-
-                long startEpoch = minuteEpoch - Duration.ofSeconds(30).toMillis();
-                long endEpoch = minuteEpoch + Duration.ofSeconds(90).toMillis();
-
-                h.setStartTs(startEpoch);
-                h.setEndTs(endEpoch);
-
-                h.setStatus("DONE");
-                h.setHighlightType(highlightType);
-                highlightRepository.save(h);
-            }
-        }
-        log.info("하이라이트 생성 완료 - videoId: {}", videoId);
     }
 }

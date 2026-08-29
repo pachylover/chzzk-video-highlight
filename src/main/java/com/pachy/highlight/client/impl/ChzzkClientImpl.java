@@ -21,6 +21,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 
 import java.util.*;
+import java.util.function.IntConsumer;
 
 @Primary
 @Component
@@ -39,7 +40,7 @@ public class ChzzkClientImpl implements ChzzkClient {
     private static final int MAX_RETRIES = 5;
 
     @Override
-    public List<Chat> fetchAllChats(String videoId) {
+    public List<Chat> fetchAllChats(String videoId, IntConsumer onProgress) {
         List<Chat> out = new ArrayList<>();
         long playerMessageTime = 0; // start from latest and walk back
         int pageSize = DEFAULT_PAGE_SIZE;
@@ -120,6 +121,8 @@ public class ChzzkClientImpl implements ChzzkClient {
 
                     out.add(c);
                 }
+
+                onProgress.accept(out.size());
 
                 Long next = resp.getContent().getNextPlayerMessageTime();
                 if (next == null || next.equals(playerMessageTime)) {

@@ -20,6 +20,7 @@ public class ChatBatchInsertRepository {
     private static final String INSERT_SQL = """
             INSERT INTO chats (video_id, user_id, username, message, player_message_time, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
             """;
 
     private final JdbcTemplate jdbcTemplate;
