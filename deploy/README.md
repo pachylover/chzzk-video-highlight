@@ -66,7 +66,10 @@ docker version
 
 **Lightsail 콘솔 → 네트워킹 → IPv4 방화벽**: `22`, `80`, `443`만 남긴다.
 **5432는 열지 않는다** — DB는 compose 내부 네트워크로만 접근한다.
-가능하면 22번은 "제한된 소스 IP"로 내 IP만 허용한다.
+
+> 22번을 "제한된 소스 IP"로 잠그면 **GitHub Actions 배포가 접속하지 못한다**(러너 IP 가 매번 바뀐다).
+> Actions 로 배포할 거라면 22번은 열어 두고 비밀번호 로그인 없이 키 인증만 쓴다
+> (`sudo sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload ssh`).
 
 ---
 
@@ -186,17 +189,55 @@ docker save hiphant-api:$TAG | gzip | \
 echo "API_IMAGE=hiphant-api:$TAG"   # 이 값을 서버 .env 의 API_IMAGE 에 넣는다
 ```
 
-### 방법 B — GitHub Actions → GHCR (이후 배포용)
+### 방법 B — GitHub Actions (이후 상시 배포용)
 
-`.github/workflows/publish-image.yml` 을 넣어 두었다. main 에 push 하면 이미지가
-`ghcr.io/pachylover/hiphant-api:latest` 로 올라간다. 서버에서는:
+워크플로 두 개가 들어 있다. **워크플로 = `.github/workflows/*.yml` 파일 하나**이고,
+GitHub 가 정해진 시점에 자기네 서버(runner)에서 실행한다. 결과는 저장소 **Actions 탭**에서 본다.
 
-```bash
-# 패키지가 private 이면 한 번만 로그인 (GitHub PAT, read:packages 권한)
-echo <PAT> | docker login ghcr.io -u pachylover --password-stdin
+| 파일 | 언제 도는가 | 무엇을 하는가 |
+| --- | --- | --- |
+| `publish-image.yml` | master 에 push 될 때 자동 | 이미지를 빌드해 GHCR 에 올린다 (`latest`, `sha-xxxxxxx` 두 태그) |
+| `deploy.yml` | **Actions 탭에서 버튼을 눌러 수동** | 서버에 SSH 로 붙어 이미지를 교체하고 기동을 확인한다 |
 
-docker compose pull api && docker compose up -d api
-```
+빌드는 자동, 배포는 수동으로 시작하는 구성이다. 익숙해지면 `deploy.yml` 의 `push:` 주석을
+풀어 자동 배포로 바꾸면 된다.
+
+**한 번만 하는 준비**
+
+1. **서버에서 GHCR 로그인** — 패키지가 private 인 경우. GitHub → Settings → Developer settings →
+   Personal access tokens (classic) → `read:packages` 권한으로 발급.
+   ```bash
+   echo <PAT> | docker login ghcr.io -u pachylover --password-stdin
+   ```
+   (또는 저장소 Packages 설정에서 이미지를 public 으로 바꾸면 로그인 자체가 불필요하다.)
+
+2. **저장소에 시크릿 등록** — 저장소 → Settings → Secrets and variables → Actions →
+   **New repository secret**. 두 개를 만든다.
+
+   | 이름 | 값 |
+   | --- | --- |
+   | `LIGHTSAIL_HOST` | 서버 고정 IP |
+   | `LIGHTSAIL_SSH_KEY` | SSH 개인키 **전문** (`-----BEGIN`부터 `-----END OPENSSH PRIVATE KEY-----`까지, 줄바꿈 포함) |
+
+   Lightsail 기본 키는 콘솔 → 계정 → SSH 키에서 받은 `.pem` 파일이다.
+   `cat ~/LightsailDefaultKey.pem` 결과를 통째로 붙여넣는다.
+
+3. **22번 포트가 열려 있는지 확인** — 2번 항목의 경고 참고.
+
+**배포하는 법**
+
+1. 저장소 → **Actions** 탭 → 왼쪽에서 **deploy** 선택 → 우측 **Run workflow** 버튼
+2. `image_tag` 에 `latest` (또는 특정 커밋의 `sha-abc1234`) 입력 → 초록 버튼
+3. 실행 로그가 실시간으로 뜬다. 각 단계를 펼치면 서버에서 나온 출력이 그대로 보인다.
+4. 마지막 "기동 확인" 단계가 초록이면 배포 완료다. 실패하면 서버 로그 60줄을 자동으로 찍어준다.
+
+**롤백**: 같은 방식으로 이전 `sha-xxxxxxx` 태그를 넣고 다시 실행하면 된다.
+`deploy.yml` 이 서버 `.env` 의 `API_IMAGE` 를 그 태그로 바꾸고 컨테이너를 갈아끼운다.
+
+**Actions 가 처음이라면 알아둘 것**
+- 워크플로 파일은 **기본 브랜치(master)에 있어야** Actions 탭에 나타난다. PR 상태로는 수동 실행 버튼이 안 보인다.
+- 시크릿은 등록 후 값을 다시 볼 수 없다. 로그에도 `***` 로 가려진다.
+- 실행이 실패하면 빨간 X 를 눌러 어느 단계에서 멈췄는지 본다. 다시 실행은 우측 **Re-run jobs**.
 
 ---
 
