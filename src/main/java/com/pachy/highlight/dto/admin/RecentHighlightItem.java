@@ -13,6 +13,8 @@ public class RecentHighlightItem {
     private Long id;
     private String videoId;
     private String videoTitle;
+    private String channelId;
+    private String channelName;
     private String title;
     private Integer chatCount;
     private String highlightType;
@@ -24,6 +26,8 @@ public class RecentHighlightItem {
                 .id(h.getId())
                 .videoId(h.getVideoId())
                 .videoTitle(h.getVideoTitle())
+                .channelId(h.getChannelId())
+                .channelName(h.getChannelName())
                 .title(h.getTitle())
                 .chatCount(h.getChatCount())
                 .highlightType(h.getHighlightType())

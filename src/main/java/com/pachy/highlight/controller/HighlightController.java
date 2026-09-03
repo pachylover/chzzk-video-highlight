@@ -42,6 +42,42 @@ public class HighlightController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * 사이트맵용: 하이라이트가 생성된 영상 목록 (영상별 1건, 최근 순).
+     * 홈의 /recent 와 같은 데이터지만 검색엔진 색인을 위해 더 많은 건수를 허용한다.
+     */
+    @GetMapping("/index")
+    public ResponseEntity<ResponseList<RecentHighlightItem>> index(
+            @RequestParam(value = "limit", defaultValue = "500") int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 2000);
+        List<Highlight> highlights = highlightRepository.findRecentDistinctVideoHighlights(safeLimit);
+        List<RecentHighlightItem> items = highlights.stream().map(RecentHighlightItem::from).toList();
+
+        ResponseList<RecentHighlightItem> response = new ResponseList<>(HttpStatus.OK);
+        response.setCount(items.size());
+        response.setList(items);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 같은 스트리머의 다른 하이라이트 페이지 목록.
+     * 하이라이트 화면 하단에서 "이 스트리머의 다른 하이라이트"로 노출된다.
+     */
+    @GetMapping("/channel/{channelId}")
+    public ResponseEntity<ResponseList<RecentHighlightItem>> byChannel(
+            @PathVariable("channelId") String channelId,
+            @RequestParam(value = "exclude", defaultValue = "") String excludeVideoId,
+            @RequestParam(value = "limit", defaultValue = "6") int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 20);
+        List<Highlight> highlights = highlightRepository.findChannelHighlights(channelId, excludeVideoId, safeLimit);
+        List<RecentHighlightItem> items = highlights.stream().map(RecentHighlightItem::from).toList();
+
+        ResponseList<RecentHighlightItem> response = new ResponseList<>(HttpStatus.OK);
+        response.setCount(items.size());
+        response.setList(items);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ResponseList<HighlightResponse>> get(@PathVariable("id") String id) {
         ResponseList<HighlightResponse> response = new ResponseList<>();

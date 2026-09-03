@@ -23,15 +23,37 @@ public interface HighlightRepository extends JpaRepository<Highlight, Long> {
           ") t ORDER BY created_at DESC LIMIT :limit", nativeQuery = true)
   List<Highlight> findRecentDistinctVideoHighlights(@Param("limit") int limit);
 
-  // 영상 제목이 아직 채워지지 않은 영상 ID 목록 (백필 대상)
-  @Query(value = "SELECT DISTINCT video_id FROM highlights WHERE video_title IS NULL OR video_title = ''",
-          nativeQuery = true)
-  List<String> findVideoIdsMissingTitle();
+  /**
+   * 같은 스트리머(채널)의 다른 하이라이트 — 영상별 최신 1건씩, 최근 생성 순.
+   * 현재 보고 있는 영상은 제외한다.
+   */
+  @Query(value = "SELECT * FROM (" +
+          "  SELECT DISTINCT ON (video_id) * FROM highlights " +
+          "  WHERE channel_id = :channelId AND video_id <> :excludeVideoId " +
+          "  ORDER BY video_id, created_at DESC" +
+          ") t ORDER BY created_at DESC LIMIT :limit", nativeQuery = true)
+  List<Highlight> findChannelHighlights(@Param("channelId") String channelId,
+                                        @Param("excludeVideoId") String excludeVideoId,
+                                        @Param("limit") int limit);
 
-  @Modifying
-  @Query(value = "UPDATE highlights SET video_title = :title, updated_at = now() WHERE video_id = :videoId",
+  // 영상 제목/채널 정보가 아직 채워지지 않은 영상 ID 목록 (백필 대상)
+  @Query(value = "SELECT DISTINCT video_id FROM highlights " +
+          "WHERE video_title IS NULL OR video_title = '' OR channel_id IS NULL",
           nativeQuery = true)
-  int updateVideoTitle(@Param("videoId") String videoId, @Param("title") String title);
+  List<String> findVideoIdsMissingMeta();
+
+  /** 조회에 성공한 값만 덮어쓴다(치지직 조회 실패로 NULL 이 오면 기존 값을 유지). */
+  @Modifying
+  @Query(value = "UPDATE highlights SET " +
+          "video_title = COALESCE(CAST(:title AS text), video_title), " +
+          "channel_id = COALESCE(CAST(:channelId AS text), channel_id), " +
+          "channel_name = COALESCE(CAST(:channelName AS text), channel_name), " +
+          "updated_at = now() WHERE video_id = :videoId",
+          nativeQuery = true)
+  int updateVideoMeta(@Param("videoId") String videoId,
+                      @Param("title") String title,
+                      @Param("channelId") String channelId,
+                      @Param("channelName") String channelName);
 
   // 통계
   @Query(value = "SELECT count(DISTINCT video_id) FROM highlights", nativeQuery = true)

@@ -12,6 +12,8 @@ public class HighlightResponse {
     private String status;
     private String videoId;
     private String videoTitle;
+    private String channelId;
+    private String channelName;
     private long minute;
     private long start;
     private long end;
