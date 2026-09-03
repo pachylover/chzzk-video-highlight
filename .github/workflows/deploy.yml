@@ -1,0 +1,101 @@
+# Lightsail 서버에 배포한다.
+#
+# publish-image.yml 이 GHCR 에 올려둔 이미지를 서버가 pull 하고 컨테이너를 갈아끼운다.
+# 처음에는 "수동 실행"만 되도록 해 두었다 — Actions 탭에서 버튼을 눌러 배포한다.
+# 익숙해지면 아래 on: 블록의 push 주석을 풀어 master 머지 시 자동 배포로 바꾸면 된다.
+#
+# 필요한 사전 준비 (한 번만):
+#  1) 저장소 Settings → Secrets and variables → Actions → New repository secret
+#       LIGHTSAIL_HOST     = 서버 고정 IP (예: 13.125.x.x)
+#       LIGHTSAIL_SSH_KEY  = SSH 개인키 전문 (-----BEGIN ... END----- 까지 그대로)
+#  2) 서버에서 GHCR 로그인 (이미지가 private 인 경우)
+#       echo <GitHub PAT(read:packages)> | docker login ghcr.io -u pachylover --password-stdin
+#  3) Lightsail 방화벽에서 22번 포트가 열려 있어야 한다.
+#     "내 IP만 허용"으로 잠가 두면 GitHub 러너가 접속하지 못한다.
+
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "배포할 이미지 태그 (latest 또는 sha-abc1234)"
+        required: true
+        default: latest
+  # 자동 배포로 바꾸려면 아래 두 줄의 주석을 푼다
+  # push:
+  #   branches: [master]
+
+concurrency:
+  group: deploy-lightsail
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 배포할 이미지 결정
+        id: image
+        run: |
+          TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+          # GHCR 경로는 소문자만 허용한다
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "ref=ghcr.io/$REPO:$TAG" >> "$GITHUB_OUTPUT"
+          echo "배포 대상: ghcr.io/$REPO:$TAG"
+
+      - name: SSH 키 준비
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        run: |
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::LIGHTSAIL_SSH_KEY 시크릿이 없습니다. 저장소 Settings → Secrets 에 등록하세요."
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: 서버에서 이미지 교체
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          IMAGE: ${{ steps.image.outputs.ref }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=15 "ubuntu@$HOST" "IMAGE='$IMAGE' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/hiphant
+
+          echo "▶ 현재 이미지: $(grep '^API_IMAGE=' .env || echo '(없음)')"
+          # .env 의 API_IMAGE 를 이번에 배포할 태그로 바꾼다 (롤백 시 이 값을 되돌리면 된다)
+          sed -i "s|^API_IMAGE=.*|API_IMAGE=$IMAGE|" .env
+          echo "▶ 새 이미지: $IMAGE"
+
+          docker compose pull api
+          docker compose up -d api
+          docker image prune -f --filter "until=168h"
+
+          echo "▶ 컨테이너 상태"
+          docker compose ps
+          REMOTE
+
+      - name: 기동 확인
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+        run: |
+          echo "컨테이너가 뜰 때까지 대기 (최대 3분)"
+          for i in $(seq 1 36); do
+            if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "ubuntu@$HOST" \
+                 "cd /opt/hiphant && docker compose exec -T api bash -c 'echo > /dev/tcp/127.0.0.1/8080'" 2>/dev/null; then
+              echo "✅ API 정상 기동"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::API 가 3분 안에 뜨지 않았습니다. 서버에서 'docker compose logs api' 를 확인하세요."
+          ssh -i ~/.ssh/deploy_key "ubuntu@$HOST" "cd /opt/hiphant && docker compose logs --tail 60 api" || true
+          exit 1
+
+      - name: 배포 정리
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
