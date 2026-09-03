@@ -3,6 +3,7 @@ package com.pachy.highlight.repository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -71,4 +72,16 @@ public interface ChatRepository extends JpaRepository<Chat, Long> {
 
     @Query(value = "SELECT player_message_time FROM chats WHERE video_id = :videoId AND player_message_time IN (:times)", nativeQuery = true)
     List<Long> findExistingMessageTimes(@Param("videoId") String videoId, @Param("times") List<Long> times);
+
+    /** 비수집 요청 처리: 해당 회원의 채팅을 모두 삭제하고 삭제 건수를 반환한다. */
+    @Modifying
+    @Query(value = "DELETE FROM chats WHERE user_id = :userId", nativeQuery = true)
+    int deleteByUserId(@Param("userId") String userId);
+
+    long countByUserId(String userId);
+
+    /** 비수집 등록 전 확인용: 해당 uid 로 저장된 닉네임 목록 */
+    @Query(value = "SELECT DISTINCT username FROM chats WHERE user_id = :userId AND username IS NOT NULL LIMIT 10",
+            nativeQuery = true)
+    List<String> findNicknamesByUserId(@Param("userId") String userId);
 }

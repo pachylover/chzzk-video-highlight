@@ -1,6 +1,7 @@
 package com.pachy.highlight.service.impl;
 
 import com.pachy.highlight.client.ChzzkClient;
+import com.pachy.highlight.dto.ChzzkVideoResponse;
 import com.pachy.highlight.dto.progress.ProgressEvent;
 import com.pachy.highlight.dto.progress.ProgressEvent.Phase;
 import com.pachy.highlight.entity.Chat;
@@ -8,6 +9,7 @@ import com.pachy.highlight.entity.Highlight;
 import com.pachy.highlight.repository.ChatBatchInsertRepository;
 import com.pachy.highlight.repository.ChatRepository;
 import com.pachy.highlight.repository.HighlightRepository;
+import com.pachy.highlight.service.BlockedUserService;
 import com.pachy.highlight.service.VideoInfoService;
 import com.pachy.highlight.service.progress.ProgressService;
 
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Component;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 채팅 수집 → 저장 → 하이라이트 추출을 백그라운드에서 수행한다.
@@ -41,12 +44,13 @@ public class HighlightProcessor {
     private final ChzzkClient chzzkClient;
     private final VideoInfoService videoInfoService;
     private final ProgressService progressService;
+    private final BlockedUserService blockedUserService;
 
     /** 채팅 수집 + 하이라이트 생성 (전체 파이프라인). */
     @Async
     public void process(String videoId) {
         try {
-            String videoTitle = resolveTitle(videoId);
+            VideoMeta meta = resolveMeta(videoId);
 
             int collected = collectChats(videoId, 0, 70);
             if (collected == 0) {
@@ -62,7 +66,7 @@ public class HighlightProcessor {
                 collected = (int) Math.min(Integer.MAX_VALUE, stored);
             }
 
-            int created = analyze(videoId, videoTitle);
+            int created = analyze(videoId, meta);
 
             progressService.publish(ProgressEvent.builder()
                     .videoId(videoId).phase(Phase.DONE)
@@ -118,6 +122,8 @@ public class HighlightProcessor {
                         .percent(scaleUnknownTotal(count, fromPercent, fetchEnd))
                         .chatCount(count).at(java.time.Instant.now()).build()));
 
+        chats = excludeBlockedUsers(videoId, chats);
+
         log.info("채팅 수집 완료 - videoId: {}, 채팅 수: {}", videoId, chats.size());
         if (chats.isEmpty()) return 0;
 
@@ -147,29 +153,56 @@ public class HighlightProcessor {
     }
 
     /** 저장된 채팅에서 하이라이트 구간을 뽑아 저장하고, 생성된 하이라이트 수를 반환한다. */
-    private int analyze(String videoId, String videoTitle) {
+    private int analyze(String videoId, VideoMeta meta) {
         progressService.publish(videoId, Phase.ANALYZE, "채팅이 많았던 구간을 분석하는 중입니다", 75);
-        int created = saveHighlights(videoId, videoTitle,
+        int created = saveHighlights(videoId, meta,
                 chatRepository.findPeakMinute(videoId), "NORMAL", "%d개의 채팅이 발생한 구간");
 
         progressService.publish(videoId, Phase.ANALYZE, "ㅋㅋㅋ 구간을 분석하는 중입니다", 85);
-        created += saveHighlights(videoId, videoTitle,
+        created += saveHighlights(videoId, meta,
                 chatRepository.findKeywordPeakMinute(videoId, "ㅋㅋㅋ"), "LAUGH", "%d개의 ㅋㅋㅋ 채팅이 발생한 구간");
 
         progressService.publish(videoId, Phase.ANALYZE, "갈고리 구간을 분석하는 중입니다", 95);
-        created += saveHighlights(videoId, videoTitle,
+        created += saveHighlights(videoId, meta,
                 chatRepository.findKeywordPeakMinute(videoId, "?"), "QUESTION", "%d개의 ? 채팅이 발생한 구간");
 
         return created;
     }
 
-    private String resolveTitle(String videoId) {
+    /** 하이라이트에 함께 저장할 영상/채널 정보. 조회 실패 시 모든 값이 null 이다. */
+    record VideoMeta(String title, String channelId, String channelName) {
+        static final VideoMeta EMPTY = new VideoMeta(null, null, null);
+    }
+
+    private VideoMeta resolveMeta(String videoId) {
         try {
-            return videoInfoService.getTitle(videoId);
+            ChzzkVideoResponse info = videoInfoService.get(videoId);
+            if (info == null) return VideoMeta.EMPTY;
+
+            String title = info.getVideoTitle() != null && !info.getVideoTitle().isBlank()
+                    ? info.getVideoTitle() : null;
+            ChzzkVideoResponse.Channel channel = info.getChannel();
+            return new VideoMeta(title,
+                    channel != null ? channel.getChannelId() : null,
+                    channel != null ? channel.getChannelName() : null);
         } catch (Exception e) {
-            log.warn("영상 제목 조회 실패 - videoId: {}", videoId, e);
-            return null;
+            log.warn("영상 정보 조회 실패 - videoId: {}", videoId, e);
+            return VideoMeta.EMPTY;
         }
+    }
+
+    /** 수집을 원하지 않는다고 요청한 회원(블랙리스트)의 채팅을 저장 전에 걸러낸다. */
+    private List<Chat> excludeBlockedUsers(String videoId, List<Chat> chats) {
+        Set<String> blocked = blockedUserService.blockedUids();
+        if (blocked.isEmpty()) return chats;
+
+        List<Chat> kept = chats.stream()
+                .filter(c -> c.getUserId() == null || !blocked.contains(c.getUserId()))
+                .toList();
+
+        int removed = chats.size() - kept.size();
+        if (removed > 0) log.info("비수집 회원 채팅 제외 - videoId: {}, {}건", videoId, removed);
+        return kept;
     }
 
     /**
@@ -180,7 +213,7 @@ public class HighlightProcessor {
         return from + (int) Math.round((to - from) * ratio);
     }
 
-    private int saveHighlights(String videoId, String videoTitle, List<Object[]> peakRows,
+    private int saveHighlights(String videoId, VideoMeta meta, List<Object[]> peakRows,
                                String highlightType, String titleFormat) {
         int created = 0;
         for (Object[] row : peakRows) {
@@ -194,7 +227,9 @@ public class HighlightProcessor {
 
             Highlight h = new Highlight();
             h.setVideoId(videoId);
-            h.setVideoTitle(videoTitle);
+            h.setVideoTitle(meta.title());
+            h.setChannelId(meta.channelId());
+            h.setChannelName(meta.channelName());
             h.setMinute(minuteEpoch);
             h.setChatCount(cnt != null ? cnt.intValue() : 0);
             h.setTitle(cnt != null ? String.format(titleFormat, cnt.intValue()) : "하이라이트");

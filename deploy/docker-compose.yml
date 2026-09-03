@@ -1,0 +1,99 @@
+# HiPhant 운영 스택 (AWS Lightsail 2GB)
+#
+#   서버의 /opt/hiphant 에 이 파일 + Caddyfile + .env 를 두고 실행한다.
+#     docker compose up -d
+#     docker compose ps
+#     docker compose logs -f api
+#
+# 프론트(Next.js)는 Vercel 에 그대로 두는 구성이다. 이 서버에는 DB + API + 리버스 프록시만 올린다.
+
+name: hiphant
+
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    # 2GB 인스턴스 기준 튜닝. shared_buffers 를 더 올리면 API 가 쓸 메모리가 부족해진다.
+    command: >
+      postgres
+      -c shared_buffers=384MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=128MB
+      -c effective_cache_size=1GB
+      -c max_connections=30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    # 호스트에 포트를 열지 않는다. DB 는 이 compose 네트워크 안에서만 접근한다.
+    # 외부에서 붙어야 하면 SSH 터널을 쓴다:
+    #   ssh -i key.pem -L 5432:localhost:5432 ubuntu@<IP> 로는 안 되고,
+    #   docker compose exec postgres psql ... 로 서버 안에서 접속한다.
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  api:
+    # 로컬에서 build 후 docker save/load 했다면 hiphant-api:<태그> 로 바꾼다
+    image: ${API_IMAGE:-ghcr.io/pachylover/hiphant-api:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # reWriteBatchedStatements=true — 채팅 대량 배치 insert 성능에 직결된다. 빼지 말 것.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}?reWriteBatchedStatements=true
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
+      # 최초 1회 관리자 계정 부트스트랩용. 계정이 만들어진 뒤에는 .env 에서 지워도 된다.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-dummy}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-100}
+      # 컨테이너 메모리의 70% 를 힙 상한으로. 2GB 에서 Postgres 와 함께 돌 수 있는 선.
+      JAVA_OPTS: "-Xms256m -Xmx640m -XX:MaxRAMPercentage=70 -Dspring.profiles.active=prod"
+      TZ: Asia/Seoul
+    expose:
+      - "8080"
+    healthcheck:
+      # 런타임 이미지에 curl/wget 이 없어 bash 의 /dev/tcp 로 확인한다
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8080"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data     # 발급받은 TLS 인증서 — 지우면 재발급 (Let's Encrypt 한도 주의)
+      - caddyconfig:/config
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  pgdata:
+  caddydata:
+  caddyconfig:

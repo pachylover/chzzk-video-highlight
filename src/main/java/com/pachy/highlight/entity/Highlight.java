@@ -27,6 +27,13 @@ public class Highlight {
     @Column(name = "video_title")
     private String videoTitle;
 
+    // 스트리머(채널) 정보. 같은 스트리머의 다른 하이라이트를 묶어 보여주기 위해 저장한다.
+    @Column(name = "channel_id")
+    private String channelId;
+
+    @Column(name = "channel_name")
+    private String channelName;
+
     @Column(name = "minute", nullable = false, columnDefinition = "bigint")
     private Long minute;
 
@@ -74,6 +81,8 @@ public class Highlight {
                 .status(status)
                 .videoId(videoId)
                 .videoTitle(videoTitle)
+                .channelId(channelId)
+                .channelName(channelName)
                 .minute(minute != null ? minute : 0L)
                 .start(startTs != null ? startTs : 0L)
                 .end(endTs != null ? endTs : 0L)

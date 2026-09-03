@@ -27,18 +27,19 @@ public class ChzzkVideoResponse {
     private boolean adult;
     private boolean clipVideo;
     private boolean paidPromotion;
-}
 
-@Data
-class Channel {
-    private String channelId;
-    private String channelName;
-    private String channelImageUrl;
-    private boolean verifiedMark;
-}
+    /** 채널(스트리머) 정보. 하이라이트에 채널을 기록하기 위해 다른 패키지에서도 읽는다. */
+    @Data
+    public static class Channel {
+        private String channelId;
+        private String channelName;
+        private String channelImageUrl;
+        private boolean verifiedMark;
+    }
 
-@Data
-class VideoIncr {
-    private int likeCount;
-    private int commentCount;
+    @Data
+    public static class VideoIncr {
+        private int likeCount;
+        private int commentCount;
+    }
 }
