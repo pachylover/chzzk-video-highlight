@@ -71,7 +71,16 @@ curl https://hiphant.pachylover.com/api/v1/highlights/{videoId}
 curl "https://hiphant.pachylover.com/api/v1/chats/{videoId}?keyword=하이라이트&page=0&size=30"
 ```
 
-### 5) 배너 / 안내문구 (공개 조회)
+### 5) 같은 스트리머의 다른 하이라이트
+
+- `GET /api/v1/highlights/channel/{channelId}?exclude={videoId}&limit=6`
+- 해당 채널에서 하이라이트가 생성된 영상들을 영상별 최신 1건씩 최근 순으로 반환합니다. `exclude` 로 현재 보고 있는 영상을 제외합니다.
+
+```bash
+curl "https://hiphant.pachylover.com/api/v1/highlights/channel/{channelId}?exclude={videoId}&limit=6"
+```
+
+### 6) 배너 / 안내문구 (공개 조회)
 
 - `GET /api/v1/banners` — 활성 배너 목록
 - `GET /api/v1/announcements` — 활성 안내문구 목록
@@ -86,6 +95,15 @@ curl "https://hiphant.pachylover.com/api/v1/chats/{videoId}?keyword=하이라이
 - `GET  /api/v1/admin/highlights/recent?limit=20` — 최근 생성 하이라이트
 - `GET/POST/PUT/DELETE /api/v1/admin/banners` — 배너 관리
 - `GET/POST/PUT/DELETE /api/v1/admin/announcements` — 안내문구 관리
+- `GET  /api/v1/admin/blocked-users` — 비수집(수집 거부) 회원 목록
+- `GET  /api/v1/admin/blocked-users/preview?uid=` — 등록 전 확인(해당 uid 의 저장된 채팅 수/닉네임)
+- `POST /api/v1/admin/blocked-users` — `{ "uid", "nickname", "memo" }` → 등록 + 해당 회원 채팅 즉시 삭제
+- `DELETE /api/v1/admin/blocked-users/{id}` — 등록 해제(삭제된 채팅은 복구되지 않음)
+
+### 비수집(블랙리스트) 회원
+
+수집을 원하지 않는다는 요청을 받으면 `uid`(치지직 채널 URL 뒤의 긴 문자열 = `chats.user_id`)를 등록합니다.
+등록 시 해당 회원의 채팅이 DB 에서 삭제되고, 이후 채팅 수집 단계에서도 해당 uid 는 저장 전에 제외됩니다.
 
 ### 관리자 계정 생성 (부트스트랩)
 

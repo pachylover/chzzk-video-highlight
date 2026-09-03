@@ -1,0 +1,25 @@
+# HiPhant API 리버스 프록시.
+# 도메인은 .env 의 API_DOMAIN 에서 온다. TLS 인증서는 Caddy 가 Let's Encrypt 로 자동 발급/갱신한다.
+
+{$API_DOMAIN} {
+	encode gzip
+
+	reverse_proxy api:8080 {
+		# 하이라이트 생성 진행률(SSE, /api/v1/highlights/{id}/stream)이 버퍼링되지 않도록 필수.
+		# 이걸 빼면 진행률이 끊겨 보이거나 완료된 뒤에 한꺼번에 도착한다.
+		flush_interval -1
+
+		# 채팅 수집이 오래 걸리는 요청은 없지만, SSE 연결이 끊기지 않도록 넉넉히 둔다
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10mb
+			roll_keep 3
+		}
+	}
+}
