@@ -34,12 +34,16 @@ public class ChzzkClientImpl implements ChzzkClient {
     private final WebClient webClient;
     /** 페이지 사이 간격(ms). 간격 없이 연속 호출하면 봇으로 판정돼 응답이 끊길 수 있다. */
     private final long pageDelayMs;
+    /** 응답이 끊긴 뒤 다시 시도하기까지의 대기. 짧게 재시도하면 곧바로 다시 막힌다. */
+    private final long stallCooldownMs;
 
     public ChzzkClientImpl(ObjectMapper mapper, @Qualifier("chzzkWebClient") WebClient webClient,
-                           @Value("${chzzk.page-delay-ms:200}") long pageDelayMs) {
+                           @Value("${chzzk.page-delay-ms:300}") long pageDelayMs,
+                           @Value("${chzzk.stall-cooldown-ms:15000}") long stallCooldownMs) {
         this.mapper = mapper;
         this.webClient = webClient;
         this.pageDelayMs = pageDelayMs;
+        this.stallCooldownMs = stallCooldownMs;
     }
 
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -223,7 +227,8 @@ public class ChzzkClientImpl implements ChzzkClient {
                     log.error("재시도 한도 초과로 수집 중단 - videoId: {}, 총 {}건", videoId, out.size());
                     break;
                 }
-                backoffSleep(retry);
+                // 치지직이 응답을 끊은 상태다. 1초 뒤 재시도하면 또 막히므로 충분히 쉰다.
+                sleepQuietly(stallCooldownMs);
             }
         }
 
