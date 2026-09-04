@@ -56,7 +56,9 @@ public class RateLimitFilter implements Filter {
     Bucket bucket = buckets.computeIfAbsent(ip, k -> createNewBucket());
 
     if (bucket.tryConsume(1)) { // 토큰이 있으면 통과
-      log.warn("Rate limit allowed for IP: {}", ip);
+      // 모든 요청마다 찍히던 로그였다. WARN 으로 남기면 파일 로그가 순식간에 차서 정작
+      // 필요한 초과 기록이 롤링으로 밀려난다.
+      log.debug("Rate limit allowed for IP: {}", ip);
       chain.doFilter(request, response);
     } else { // 토큰 없으면 429 에러
       ((HttpServletResponse) response).setStatus(429);
