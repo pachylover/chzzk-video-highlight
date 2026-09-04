@@ -26,7 +26,8 @@ public class WebClientConfig {
 			@Value("${chzzk.base-url}") String baseUrl,
 			@Value("${chzzk.max-in-memory-size:10485760}") int maxInMemorySize,
 			@Value("${chzzk.connect-timeout-ms:10000}") int connectTimeoutMs,
-			@Value("${chzzk.response-timeout-ms:20000}") int responseTimeoutMs) {
+			@Value("${chzzk.response-timeout-ms:20000}") int responseTimeoutMs,
+			@Value("${chzzk.user-agent}") String userAgent) {
 		ExchangeStrategies strategies = ExchangeStrategies.builder()
 				.codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxInMemorySize))
 				.build();
@@ -48,6 +49,10 @@ public class WebClientConfig {
 		return builder.baseUrl(baseUrl)
 				.clientConnector(new ReactorClientHttpConnector(httpClient))
 				.exchangeStrategies(strategies)
+				// 익명 클라이언트로 보이지 않도록 서비스와 연락처를 밝힌다.
+				// 치지직은 마음에 들지 않는 클라이언트에게 응답을 아예 주지 않는 방식으로 막는데
+				// (curl 기본 UA 가 그렇다), 그 경우 요청이 그대로 매달린다.
+				.defaultHeader("User-Agent", userAgent)
 				.build();
 	}
 }
