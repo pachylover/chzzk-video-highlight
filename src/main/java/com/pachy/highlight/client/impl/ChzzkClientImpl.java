@@ -20,6 +20,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 
+import java.time.Duration;
 import java.util.*;
 import java.util.function.IntConsumer;
 
@@ -38,6 +39,10 @@ public class ChzzkClientImpl implements ChzzkClient {
 
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final int MAX_RETRIES = 5;
+    /** 새 채팅이 하나도 늘지 않는 페이지가 이만큼 연속되면 더 볼 것이 없다고 본다. */
+    private static final int MAX_NO_PROGRESS_PAGES = 3;
+    /** 한 영상 수집에 쓸 수 있는 최대 시간. 이걸 넘기면 지금까지 모은 것으로 진행한다. */
+    private static final Duration MAX_COLLECT_DURATION = Duration.ofMinutes(20);
 
     @Override
     public List<Chat> fetchAllChats(String videoId, IntConsumer onProgress) {
@@ -47,9 +52,20 @@ public class ChzzkClientImpl implements ChzzkClient {
         int retry = 0;
         Set<String> seen = new HashSet<>(); // dedupe within fetch by composite key
 
+        // 종료 보장용 — 치지직이 커서를 앞으로 보내주지 않으면 아래 세 가지 중 하나로 반드시 멈춘다.
+        Set<Long> visitedCursors = new HashSet<>();
+        int noProgressPages = 0;
+        long deadline = System.currentTimeMillis() + MAX_COLLECT_DURATION.toMillis();
+
         log.info("채팅 수집 시작 - videoId: {}", videoId);
 
         while (true) {
+            if (System.currentTimeMillis() > deadline) {
+                log.warn("채팅 수집 시간 초과({}분) - videoId: {}, 지금까지 {}건",
+                        MAX_COLLECT_DURATION.toMinutes(), videoId, out.size());
+                break;
+            }
+
             try {
                 // lambda에서 로컬 변수를 캡처할 때는 해당 변수가 final 또는 effectively final이어야 합니다.
                 // `playerMessageTime`은 루프 안에서 갱신되므로 여기서는 복사본을 만들어 사용합니다.
@@ -68,6 +84,8 @@ public class ChzzkClientImpl implements ChzzkClient {
                 if (resp == null || resp.getContent() == null || resp.getContent().getVideoChats() == null || resp.getContent().getVideoChats().isEmpty()) {
                     break;
                 }
+
+                int sizeBeforePage = out.size();
 
                 for (ChzzkChatResponse.VideoChat vc : resp.getContent().getVideoChats()) {
                     // composite key to avoid duplicates within a fetch run
@@ -124,11 +142,29 @@ public class ChzzkClientImpl implements ChzzkClient {
 
                 onProgress.accept(out.size());
 
+                // 이번 페이지에서 새로 담긴 게 없으면 같은 구간을 다시 받고 있는 것이다.
+                // out 이 늘지 않으므로 아래 건수 기반 안전장치로는 걸러지지 않아 따로 센다.
+                if (out.size() == sizeBeforePage) {
+                    if (++noProgressPages >= MAX_NO_PROGRESS_PAGES) {
+                        log.warn("새로 수집되는 채팅이 없어 중단 - videoId: {}, 총 {}건", videoId, out.size());
+                        break;
+                    }
+                } else {
+                    noProgressPages = 0;
+                }
+
                 Long next = resp.getContent().getNextPlayerMessageTime();
                 if (next == null || next.equals(playerMessageTime)) {
                     break;
                 }
-                
+
+                // 커서가 이미 지나온 값으로 되돌아오면(A → B → A) 무한히 돈다. 여기서 끊는다.
+                if (!visitedCursors.add(next)) {
+                    log.warn("커서가 이전 값으로 되돌아와 중단 - videoId: {}, cursor: {}, 총 {}건",
+                            videoId, next, out.size());
+                    break;
+                }
+
                 playerMessageTime = next;
 
                 // reset retry on success
