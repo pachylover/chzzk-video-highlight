@@ -34,8 +34,8 @@ spring:
         order_inserts: true
         order_updates: true
         jdbc.batch_versioned_data: true
-        # generate_statistics=true enables Hibernate Statistics API (used for diagnostics)
-        generate_statistics: true
+        # 세션마다 15줄짜리 Session Metrics 를 찍어 로그를 뒤덮는다. 필요할 때만 켠다.
+        generate_statistics: ${HIBERNATE_STATISTICS:false}
         # reduce session memory pressure when inserting large volumes
         default_batch_fetch_size: 50
             
