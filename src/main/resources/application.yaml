@@ -71,3 +71,12 @@ admin:
 logging:
   level:
     root: INFO
+  # 파일 로깅은 LOGGING_FILE_NAME 환경변수를 준 곳에서만 켜진다(운영 compose).
+  # 여기서 경로를 지정하지 않으므로 로컬 개발은 콘솔 출력 그대로다.
+  # 아래 정책은 파일 로깅이 켜졌을 때만 의미가 있다.
+  logback:
+    rollingpolicy:
+      # 10MB 마다 하루 단위로 말아 두고, 14일 / 총 500MB 를 넘지 않게 유지한다
+      max-file-size: 10MB
+      max-history: 14
+      total-size-cap: 500MB
