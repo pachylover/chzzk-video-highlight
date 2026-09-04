@@ -20,6 +20,9 @@
 		output file /var/log/caddy/access.log {
 			roll_size 10mb
 			roll_keep 3
+			# Caddy 는 컨테이너 안에서 root 로 돌아 기본이 0600 이다.
+			# 호스트의 ubuntu 계정이 sudo 없이 tail 할 수 있도록 644 로 만든다.
+			mode 644
 		}
 	}
 }
