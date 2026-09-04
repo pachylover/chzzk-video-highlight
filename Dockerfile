@@ -16,7 +16,10 @@ ARG APP_HOME=/opt/app
 WORKDIR ${APP_HOME}
 
 # runtime user for security
-RUN groupadd -r app && useradd -r -g app app && mkdir -p ${APP_HOME} && chown -R app:app ${APP_HOME}
+# uid/gid 를 고정한다 — 호스트에 로그 디렉터리를 바인드 마운트할 때 소유자를 맞춰야 하는데,
+# useradd -r 이 자동 할당하는 uid 는 베이스 이미지가 바뀌면 달라질 수 있다.
+RUN groupadd -r -g 10001 app && useradd -r -u 10001 -g app app \
+    && mkdir -p ${APP_HOME}/logs && chown -R app:app ${APP_HOME}
 
 # copy built artifact from builder
 COPY --from=builder /home/gradle/project/build/libs/*.jar app.jar

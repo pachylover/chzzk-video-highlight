@@ -79,7 +79,7 @@ docker version
 
 ```bash
 cd ~/hiphant/hiphant-api/deploy
-ssh -i ~/LightsailDefaultKey.pem ubuntu@43.202.59.44 'sudo mkdir -p /opt/hiphant /opt/backup && sudo chown ubuntu:ubuntu /opt/hiphant /opt/backup'
+ssh -i ~/LightsailDefaultKey.pem ubuntu@43.202.59.44 'sudo mkdir -p /opt/hiphant/logs/caddy /opt/backup && sudo chown -R ubuntu:ubuntu /opt/hiphant /opt/backup && sudo chown -R 10001:10001 /opt/hiphant/logs'
 scp -i ~/LightsailDefaultKey.pem docker-compose.yml Caddyfile .env.example backup.sh ubuntu@43.202.59.44:/opt/hiphant/
 ```
 
@@ -95,6 +95,9 @@ openssl rand -base64 48    # ADMIN_JWT_SECRET
 
 nano .env
 ```
+
+> 위 명령의 `chown 10001` 은 컨테이너 사용자에게 로그 디렉터리 쓰기 권한을 주는 것이다.
+> 자세한 내용은 아래 "로그와 데이터가 어디에 남는가" 참고.
 
 `.env`에서 최소한 채워야 하는 것: `API_DOMAIN`, `DB_PASSWORD`, `ADMIN_JWT_SECRET`,
 `ADMIN_USERNAME`/`ADMIN_PASSWORD`(최초 계정), `API_IMAGE`.
@@ -337,6 +340,62 @@ tail /opt/backup/backup.log
 
 첫 주에는 수집이 몰리는 시간대의 **버스트 용량 그래프**를 반드시 확인한다.
 매일 소진되거나 스왑이 상시 500MB 이상이면 4GB($24) 플랜으로 올린다.
+
+---
+
+## 로그와 데이터가 어디에 남는가
+
+배포로 컨테이너를 갈아끼워도 남아야 하는 것들이다.
+
+| 무엇 | 호스트 위치 | 종류 | 사라지는 조건 |
+| --- | --- | --- | --- |
+| **API 로그** | `/opt/hiphant/logs/hiphant.log` | 바인드 마운트 | 직접 지울 때만 |
+| Caddy 액세스 로그 | `/opt/hiphant/logs/caddy/access.log` | 바인드 마운트 | 직접 지울 때만 |
+| **DB 데이터** | `hiphant_pgdata` 볼륨 | 이름 있는 볼륨 | `docker compose down -v` |
+| TLS 인증서 | `hiphant_caddydata` 볼륨 | 이름 있는 볼륨 | `docker compose down -v` |
+| DB 백업 덤프 | `/opt/backup/*.dump` | 호스트 디렉터리 | `backup.sh` 의 보관 기간(14일) |
+| 컨테이너 stdout | `docker compose logs api` | Docker json-file | **컨테이너를 새로 만들면 사라짐** |
+
+마지막 줄이 파일 로깅을 넣은 이유다. `docker compose logs` 는 배포할 때마다 초기화되므로,
+장애 직후에 배포를 한 번 하면 원인을 볼 수 없다.
+
+### 준비 — 로그 디렉터리 소유자 맞추기 (한 번만) [서버]
+
+컨테이너는 비루트 사용자(**uid 10001**)로 돌기 때문에, 바인드 마운트할 호스트 디렉터리의
+소유자를 맞춰 주지 않으면 로그 파일을 만들지 못한다.
+
+```bash
+mkdir -p /opt/hiphant/logs/caddy
+sudo chown -R 10001:10001 /opt/hiphant/logs
+```
+
+이 단계를 빼먹으면 앱은 정상 기동하지만 로그 파일만 안 생긴다(콘솔에 logback 오류가 찍힌다).
+
+### 로그 보는 법 [서버]
+
+```bash
+tail -f /opt/hiphant/logs/hiphant.log              # 실시간
+grep -i error /opt/hiphant/logs/hiphant.log        # 에러만
+grep "하이라이트 생성" /opt/hiphant/logs/hiphant.log  # 특정 작업 추적
+ls -lh /opt/hiphant/logs/                          # 말려 있는 이전 파일들
+
+tail -f /opt/hiphant/logs/caddy/access.log         # 어떤 요청이 들어왔는지
+docker compose logs -f api                         # 현재 컨테이너의 stdout (기동 직후 확인용)
+```
+
+로그는 10MB 마다 말리고 **14일 / 총 500MB** 를 넘지 않게 자동 정리된다
+(`application.yaml` 의 `logging.logback.rollingpolicy`). 60GB 디스크에서 로그가 문제될 일은 없다.
+
+### 로그 레벨을 잠깐 올리고 싶을 때
+
+`.env` 에 한 줄 추가하고 `docker compose up -d api` 하면 된다. 원인을 찾은 뒤에는 지운다.
+
+```bash
+LOGGING_LEVEL_COM_PACHY_HIGHLIGHT=DEBUG
+```
+
+> `.env` 에 넣은 값은 compose 의 `environment` 에 나열된 것만 컨테이너로 전달된다.
+> 임의의 변수를 넘기려면 `docker-compose.yml` 의 api `environment` 에도 그 줄을 추가해야 한다.
 
 ---
 
