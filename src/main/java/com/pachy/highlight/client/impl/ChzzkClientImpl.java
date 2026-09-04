@@ -43,6 +43,11 @@ public class ChzzkClientImpl implements ChzzkClient {
     private static final int MAX_NO_PROGRESS_PAGES = 3;
     /** 한 영상 수집에 쓸 수 있는 최대 시간. 이걸 넘기면 지금까지 모은 것으로 진행한다. */
     private static final Duration MAX_COLLECT_DURATION = Duration.ofMinutes(20);
+    /**
+     * block() 자체의 상한. WebClient 의 응답 타임아웃이 못 잡는 구간(커넥션 풀 대기 등)까지
+     * 덮어 어떤 경우에도 스레드가 영구히 묶이지 않게 한다. 초과하면 예외가 나고 재시도로 넘어간다.
+     */
+    private static final Duration REQUEST_BLOCK_TIMEOUT = Duration.ofSeconds(30);
 
     @Override
     public List<Chat> fetchAllChats(String videoId, IntConsumer onProgress) {
@@ -79,7 +84,7 @@ public class ChzzkClientImpl implements ChzzkClient {
                                 .build(videoId))
                         .retrieve()
                         .bodyToMono(new ParameterizedTypeReference<ChzzkResponse<ChzzkChatResponse>>() {})
-                        .block();
+                        .block(REQUEST_BLOCK_TIMEOUT);
 
                 if (resp == null || resp.getContent() == null || resp.getContent().getVideoChats() == null || resp.getContent().getVideoChats().isEmpty()) {
                     break;
@@ -199,8 +204,12 @@ public class ChzzkClientImpl implements ChzzkClient {
                     break;
                 }
             } catch (Exception e) {
+                // 타임아웃(ReadTimeout / block 시간 초과)도 여기로 온다.
+                // 어디서 몇 건까지 받고 끊겼는지 남겨야 다음에 원인을 추적할 수 있다.
+                log.warn("채팅 요청 실패 - videoId: {}, 누적 {}건, {}번째 시도: {}",
+                        videoId, out.size(), retry + 1, e.toString());
                 if (retry++ >= MAX_RETRIES) {
-                    log.error("Error while fetching chats for {}: {}", videoId, e.getMessage());
+                    log.error("재시도 한도 초과로 수집 중단 - videoId: {}, 총 {}건", videoId, out.size());
                     break;
                 }
                 backoffSleep(retry);
@@ -217,7 +226,7 @@ public class ChzzkClientImpl implements ChzzkClient {
                     .uri(urlBuilder -> urlBuilder.path("/service/v3/videos/{videoId}").build(videoId))
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<ChzzkResponse<ChzzkVideoResponse>>() {})
-                    .block();
+                    .block(REQUEST_BLOCK_TIMEOUT);
 
             if (resp == null || resp.getContent() == null) {
                 return null;
