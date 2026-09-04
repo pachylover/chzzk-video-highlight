@@ -13,6 +13,7 @@ import com.pachy.highlight.util.func.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
@@ -31,10 +32,14 @@ public class ChzzkClientImpl implements ChzzkClient {
 
     private final ObjectMapper mapper;
     private final WebClient webClient;
+    /** 페이지 사이 간격(ms). 간격 없이 연속 호출하면 봇으로 판정돼 응답이 끊길 수 있다. */
+    private final long pageDelayMs;
 
-    public ChzzkClientImpl(ObjectMapper mapper, @Qualifier("chzzkWebClient") WebClient webClient) {
+    public ChzzkClientImpl(ObjectMapper mapper, @Qualifier("chzzkWebClient") WebClient webClient,
+                           @Value("${chzzk.page-delay-ms:200}") long pageDelayMs) {
         this.mapper = mapper;
         this.webClient = webClient;
+        this.pageDelayMs = pageDelayMs;
     }
 
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -175,6 +180,9 @@ public class ChzzkClientImpl implements ChzzkClient {
                 // reset retry on success
                 retry = 0;
 
+                // 다음 페이지 전에 잠시 쉰다
+                sleepQuietly(pageDelayMs);
+
                 // small safety limit (avoid infinite loops)
                 if (out.size() > 200_000) {
                     log.warn("fetchAllChats reached safety limit for video {}: {} records", videoId, out.size());
@@ -184,6 +192,9 @@ public class ChzzkClientImpl implements ChzzkClient {
             } catch (WebClientResponseException we) {
                 int code = we.getStatusCode().value();
                 if (code == 429) {
+                    // 지금까지 조용히 재시도만 해서 레이트 리밋에 걸린 사실이 드러나지 않았다
+                    log.warn("치지직 레이트 리밋(429) - videoId: {}, 누적 {}건, {}번째 시도",
+                            videoId, out.size(), retry + 1);
                     if (retry++ >= MAX_RETRIES) {
                         log.error("Too many 429 responses while fetching chats for {}", videoId);
                         break;
@@ -241,6 +252,15 @@ public class ChzzkClientImpl implements ChzzkClient {
     }
 
 
+
+    private void sleepQuietly(long millis) {
+        if (millis <= 0) return;
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
     private void backoffSleep(int retry) {
         try {

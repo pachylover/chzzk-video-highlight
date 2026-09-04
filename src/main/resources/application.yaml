@@ -56,6 +56,11 @@ chzzk:
   # 응답이 오지 않는 요청에 수집 스레드가 묶이지 않도록 상한을 둔다.
   connect-timeout-ms: ${CHZZK_CONNECT_TIMEOUT_MS:10000}
   response-timeout-ms: ${CHZZK_RESPONSE_TIMEOUT_MS:20000}
+  # 누가 보내는 요청인지 밝힌다. 익명 클라이언트는 차단 대상이 되기 쉽다.
+  user-agent: ${CHZZK_USER_AGENT:HiPhant/1.0 (+https://hiphant.pachylover.com)}
+  # 페이지 사이 간격(ms). 간격 없이 연속으로 쏘면 봇으로 판정될 수 있다.
+  # 한 요청이 채팅 200개를 주므로 채팅 1만 개 기준 약 50회 요청 = 10초 추가 정도다.
+  page-delay-ms: ${CHZZK_PAGE_DELAY_MS:200}
 
 gemini:
   # Render 환경변수에 GEMINI_API_KEY를 꼭 추가하세요!
