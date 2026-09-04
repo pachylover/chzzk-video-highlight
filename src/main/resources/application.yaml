@@ -53,6 +53,9 @@ spring:
 chzzk:
   base-url: https://api.chzzk.naver.com
   max-in-memory-size: 10485760 # 10MB
+  # 응답이 오지 않는 요청에 수집 스레드가 묶이지 않도록 상한을 둔다.
+  connect-timeout-ms: ${CHZZK_CONNECT_TIMEOUT_MS:10000}
+  response-timeout-ms: ${CHZZK_RESPONSE_TIMEOUT_MS:20000}
 
 gemini:
   # Render 환경변수에 GEMINI_API_KEY를 꼭 추가하세요!
