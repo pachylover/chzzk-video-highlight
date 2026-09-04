@@ -68,6 +68,19 @@ admin:
     username: ${ADMIN_USERNAME:}
     password: ${ADMIN_PASSWORD:}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # health: 헬스체크/업타임 모니터링, info: 배포된 빌드 확인용
+        include: health,info
+  info:
+    build:
+      enabled: true
+    env:
+      # 환경변수가 통째로 노출되지 않도록 명시적으로 끈다
+      enabled: false
+
 logging:
   level:
     root: INFO

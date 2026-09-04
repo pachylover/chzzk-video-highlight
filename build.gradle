@@ -46,6 +46,12 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// /actuator/info 에 빌드 시각을 노출한다. "지금 뜬 게 방금 배포한 그 커밋인가" 를
+// 추측하지 않고 확인하기 위한 것.
+springBoot {
+	buildInfo()
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
 }
